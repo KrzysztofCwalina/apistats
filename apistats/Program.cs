@@ -2,70 +2,66 @@
 using System.Reflection.Metadata;
 using System.Reflection.PortableExecutable;
 
-var cl = Environment.GetCommandLineArgs();
-if (cl.Length < 2) {
+string[] commandLine = Environment.GetCommandLineArgs();
+if (commandLine.Length < 2) {
     Console.WriteLine($"usage: apistats <binary>");
     return;
 }
+string filename = commandLine[1];
 
-var filename = cl[1];
-
-int typeCount = 0;
-int memberCount = 0;
-
-using var fs = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-using var peReader = new PEReader(fs);
-
+using var fileStream = new FileStream(filename, FileMode.Open, FileAccess.Read, FileShare.Read);
+using var peReader = new PEReader(fileStream);
 MetadataReader mr = peReader.GetMetadataReader();
 
-foreach (var tdefh in mr.TypeDefinitions)
+int typeCount = 0;
+int methodCount = 0;
+int propertyGetterCount = 0;
+int propertySetterCount = 0;
+foreach (TypeDefinitionHandle typeHandle in mr.TypeDefinitions)
 {
-    TypeDefinition tdef = mr.GetTypeDefinition(tdefh);
-    if (tdef.Attributes.HasFlag(TypeAttributes.Public))
+    TypeDefinition type = mr.GetTypeDefinition(typeHandle);
+    if (type.Attributes.HasFlag(TypeAttributes.Public))
     {
         typeCount++;
-        //string ns = mr.GetString(tdef.Namespace);
 
-        var methods = tdef.GetMethods();
-        var properties = tdef.GetProperties();
-
-        foreach(MethodDefinitionHandle methodHandle in methods)
+        foreach(MethodDefinitionHandle methodHandle in type.GetMethods())
         {
-            var method = mr.GetMethodDefinition(methodHandle);
+            MethodDefinition method = mr.GetMethodDefinition(methodHandle);
             if (method.Attributes.HasFlag(MethodAttributes.Public))
             {
-                memberCount++;
+                methodCount++;
             }
         }
 
-        foreach (PropertyDefinitionHandle propertyHandle in properties)
+        foreach (PropertyDefinitionHandle propertyHandle in type.GetProperties())
         {
             PropertyDefinition property = mr.GetPropertyDefinition(propertyHandle);
-            var acessors = property.GetAccessors();
-            var getterHandle = acessors.Getter;
+            PropertyAccessors acessors = property.GetAccessors();
+            MethodDefinitionHandle getterHandle = acessors.Getter;
 
             if (!getterHandle.IsNil)
             {
-                var getter = mr.GetMethodDefinition(getterHandle);
+                MethodDefinition getter = mr.GetMethodDefinition(getterHandle);
                 if (getter.Attributes.HasFlag(MethodAttributes.Public))
                 {
-                    memberCount++;
+                    propertyGetterCount++;
                 }
             }
 
-            var setterHandle = acessors.Setter;
+            MethodDefinitionHandle setterHandle = acessors.Setter;
             if (!setterHandle.IsNil)
             {
-                var setter = mr.GetMethodDefinition(setterHandle);
+                MethodDefinition setter = mr.GetMethodDefinition(setterHandle);
                 if (setter.Attributes.HasFlag(MethodAttributes.Public))
                 {
-                    memberCount++;
+                    propertySetterCount++;
                 }
             }
         }
     }
 }
 
-Console.WriteLine($"Types  : {typeCount}");
-Console.WriteLine($"Members: {memberCount}");
+Console.WriteLine($"Types      : {typeCount}");
+Console.WriteLine($"Methods    : {methodCount}");
+Console.WriteLine($"Properties : {propertyGetterCount}");
 
